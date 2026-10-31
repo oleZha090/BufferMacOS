@@ -10,43 +10,6 @@
 
 Нажмите кнопку выше → откройте `Cliply.dmg` → перетащите **Cliply** в **Applications** → запустите приложение из «Программ». Значок появится в строке меню. Для автоматической вставки разрешите Accessibility в настройках Cliply.
 
-Кнопка скачивает готовое универсальное приложение из последнего GitHub Release. Она заработает **после первого успешного выпуска** в вашем будущем репозитории. Если Mac сообщает, что разработчик не проверен, это тестовый выпуск без подписи Developer ID и нотариализации Apple; для доверенной сборки разрешите запуск в System Settings → Privacy & Security → Open Anyway. Возможность подписывать и нотариализовать обычные выпуски уже предусмотрена в workflow.
-
-Создателю репозитория: после первого push откройте **Actions → Publish macOS app → Run workflow**, укажите новую версию, например `v1.0.0`, и запустите workflow. GitHub соберёт приложение на Mac, выполнит тесты и опубликует DMG в Releases. Дальше пользователю нужна только кнопка скачивания. Тот же выпуск можно запустить отправкой тега `v1.0.0`.
-
-Однократная настройка выпуска и подписи описана в [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md).
-
-В репозитории находится готовая структура Xcode-проекта, исходники Swift/SwiftUI/AppKit, XCTest и workflow для macOS. Внешние библиотеки и менеджеры зависимостей не нужны.
-
-## Из Windows на Mac через Git
-
-На Windows редактируйте файлы в этой папке и загрузите содержимое в свой будущий Git-репозиторий обычным способом. Коммитьте `Cliply.xcodeproj`, включая `project.pbxproj` и общую схему `xcshareddata/xcschemes/Cliply.xcscheme`. Персональные настройки Xcode и результаты сборки исключены через `.gitignore`.
-
-На Mac:
-
-```sh
-git clone <URL-вашего-репозитория> Cliply
-cd Cliply
-open Cliply.xcodeproj
-```
-
-В Xcode выберите схему **Cliply**, устройство **My Mac** и нажмите **⌘R**. Приложение появится в строке меню как значок буфера обмена. Главное окно и иконка Dock не создаются. По умолчанию проект использует локальную подпись без привязки к Apple Developer Team; для распространения настройте свою подпись в Signing & Capabilities.
-
-Если разработка ведётся на Windows, полезно запускать GitHub Actions после каждого push: он собирает проект именно на macOS. Локальная проверка структуры на Windows:
-
-```powershell
-python scripts/validate_project.py
-```
-
-После добавления или удаления `.swift`-файлов обновите проект и закоммитьте изменения:
-
-```powershell
-python scripts/generate_project.py
-python scripts/validate_project.py
-```
-
-Генератор работает и на Mac с `python3`. При изменениях настроек сборки сначала меняйте генератор, затем перегенерируйте проект. Для обычной сборки Python не нужен: Xcode-проект уже включён в репозиторий.
-
 ## Использование
 
 - Копируйте текст в любом приложении. Cliply хранит последние **10 уникальных записей**, новые сверху. Повторное копирование переносит прежнюю запись наверх; 11-я новая запись вытесняет старейшую.
@@ -89,60 +52,4 @@ CGEvent не предоставляет подтверждения, что ко�
 
 Для стабильных разрешений и автозапуска используйте одну установленную копию `Cliply.app`, например в `/Applications`, с постоянным bundle ID и подписью. После замены подписи macOS может потребовать заново выдать Accessibility. Для запуска скачанного приложения без блокировки Gatekeeper настройте Developer ID и нотариализацию по [инструкции выпуска](docs/DISTRIBUTION.md). Обычный CI-артефакт `Cliply-macOS-universal.zip` предназначен для тестирования; DMG в Releases подписывается и нотариализуется, если добавлены соответствующие secrets.
 
-## Сборка и тесты на Mac
 
-Сборка универсального приложения для обеих архитектур:
-
-```sh
-xcodebuild -project Cliply.xcodeproj -scheme Cliply \
-  -configuration Release -destination 'generic/platform=macOS' \
-  -derivedDataPath build/DerivedData \
-  ARCHS='arm64 x86_64' ONLY_ACTIVE_ARCH=NO build
-```
-
-Результат: `build/DerivedData/Build/Products/Release/Cliply.app`. Для Launch at Login перенесите приложение в `/Applications` и запустите оттуда. Реальное состояние `SMAppService.mainApp.status` видно в настройках; при `requiresApproval` есть переход в системные Login Items.
-
-Unit-тесты:
-
-```sh
-xcodebuild -project Cliply.xcodeproj -scheme Cliply \
-  -configuration Debug -destination 'platform=macOS' \
-  -derivedDataPath build/TestDerivedData \
-  -resultBundlePath build/CliplyTests.xcresult test
-```
-
-Логику истории, мониторинга, настроек и вставки проверяют XCTest с подменяемыми системными зависимостями. Настоящие Carbon/Accessibility/CGEvent и поведение окон проверяются отдельно по [плану ручного тестирования](docs/MANUAL_TESTING.md). Во время hosted XCTest фоновые интеграции приложения не запускаются.
-
-При размещении на GitHub workflow `.github/workflows/macos.yml` запускает универсальную Release-сборку и unit-тесты на macOS, затем сохраняет `Cliply-macOS-universal.zip` и результаты тестов как artifacts. Push и создание репозитория выполняете вы; workflow здесь только подготовлен.
-
-Для скачивания приложения конечными пользователями предусмотрен отдельный `.github/workflows/release.yml`: он публикует **Cliply.dmg** прямо в **Releases**. В DMG находятся готовый `Cliply.app`, ссылка на Applications и инструкция. Выпуск также содержит SHA-256 и сведения о версии/подписи. При ошибке сборки, тестов или настроенной нотариализации новый выпуск не публикуется.
-
-## Архитектура и данные
-
-```text
-Cliply/App          жизненный цикл, Menu Bar и координация
-Cliply/Models       текстовая запись и конфигурация hotkey
-Cliply/Services     история, polling, Carbon, AX, CGEvent, SMAppService
-Cliply/ViewModels   поиск, выделение и настройки
-Cliply/Views        SwiftUI-панель, строки, Settings, запись сочетания
-Cliply/Window       NSPanel, позиция, закрытие снаружи, подсказки
-Cliply/Utilities    геометрия нескольких мониторов
-CliplyTests         XCTest
-Branding              исходник иконки и промпт генерации
-scripts               воспроизводимый генератор и проверка проекта
-docs/DISTRIBUTION.md   выпуск готового DMG и подпись Apple
-```
-
-Монитор использует одну последовательную фоновую очередь и один таймер с интервалом 300 мс и допуском 60 мс. Только при изменении `changeCount` он читает текст. Чтение/запись содержимого и резервирование буфера не выполняются на главном потоке. Изменения UI доставляются на главный поток; основные сервисы и координация UI изолированы `MainActor`. При сне polling останавливается, после пробуждения возобновляется.
-
-История существует только в RAM, без JSON-файлов, SQLite, Core Data, UserDefaults или сетевой отправки. В UserDefaults сохраняются **только настройки: горячая клавиша, язык и оформление**; регистрацию Launch at Login хранит macOS. Исходный текст сохраняется целиком, визуально ограничено лишь превью. Максимальный размер записи — 100 KiB UTF-8, пустые строки и строки из пробелов игнорируются. Concealed/transient/generated типы исключены; защита зависит от корректной маркировки исходным приложением. Нет аналитики и логирования содержимого.
-
-Очистка истории и удаление отдельных записей не очищают системный NSPasteboard. Содержимое текущего буфера при старте не импортируется: сбор начинается с последующих изменений. Завершение процесса удаляет его историю, но не является гарантией физического стирания памяти или swap.
-
-App Sandbox отключён для системной вставки. Hardened Runtime включён. Внешних entitlements, Apple Events automation, Screen Recording или Input Monitoring приложение не запрашивает. Обработчик глобальных событий мыши используется только пока видна история, клавиши глобально не перехватываются: горячая клавиша регистрируется через Carbon.
-
-Основные API: [NSPanel](https://developer.apple.com/documentation/appkit/nspanel), [NSRunningApplication.activate](https://developer.apple.com/documentation/appkit/nsrunningapplication/activate(options:)), [CGEvent](https://developer.apple.com/documentation/coregraphics/cgevent), [SMAppService](https://developer.apple.com/documentation/servicemanagement/smappservice).
-
-## Статус проверки
-
-Проект подготовлен в Windows, где отсутствуют Swift toolchain для macOS, SDK AppKit и Xcode. Проверена структура репозитория, соответствие исходников Xcode-проекту, ссылки PBX, Info.plist, общая схема и воспроизводимость генерации. Проверка локализаций сверяет ключи русского и английского каталогов и форматные параметры. Проверка иконок сверяет все 10 размеров и RGBA-канал, включение asset catalog в проект и имя AppIcon. Инструменты выпуска имеют отдельные Python-тесты, выполняемые и на Windows. **Компиляция Swift, запуск XCTest, UI, Accessibility, реальная вставка, Launch at Login, создание DMG и Apple signing/notarization в этой среде не проверены.** Новые изменения названия, иконки, языка, оформления и включения автовставки следует проверить через macOS GitHub Actions и план ручного тестирования. Готовность конкретного DMG подтверждается успешным выполнением Publish macOS app для соответствующей версии.
