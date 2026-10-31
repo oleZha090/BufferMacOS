@@ -1,0 +1,44 @@
+name: macOS build and tests
+
+on:
+  push:
+    branches:
+      - '**'
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate repository structure
+        run: python3 scripts/validate_project.py
+      - name: Test release tooling
+        run: python3 -m unittest discover -s scripts/tests -v
+      - name: Build universal macOS app
+        run: >-
+          xcodebuild -project ClipFlow.xcodeproj -scheme ClipFlow
+          -configuration Release -destination 'generic/platform=macOS'
+          -derivedDataPath build/DerivedData
+          ARCHS='arm64 x86_64' ONLY_ACTIVE_ARCH=NO
+          CODE_SIGNING_ALLOWED=NO build
+      - name: Run unit tests
+        run: >-
+          xcodebuild -project ClipFlow.xcodeproj -scheme ClipFlow
+          -configuration Debug -destination 'platform=macOS'
+          -derivedDataPath build/TestDerivedData
+          -resultBundlePath build/ClipFlowTests.xcresult
+          CODE_SIGNING_ALLOWED=NO test
+      - name: Package application
+        run: ditto -c -k --sequesterRsrc --keepParent build/DerivedData/Build/Products/Release/ClipFlow.app build/ClipFlow-macOS-universal.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ClipFlow-macOS-universal
+          path: build/ClipFlow-macOS-universal.zip
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ClipFlow-test-results
+          path: build/ClipFlowTests.xcresult
+          if-no-files-found: ignore

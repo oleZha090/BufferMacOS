@@ -1,0 +1,14 @@
+.DS_Store
+DerivedData/
+build/
+dist/
+*.p12
+*.p8
+*.keychain-db
+.env
+*.xcuserstate
+xcuserdata/
+*.xcresult
+.build/
+.swiftpm/
+__pycache__/

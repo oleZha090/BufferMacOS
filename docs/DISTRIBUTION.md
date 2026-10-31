@@ -1,0 +1,80 @@
+# Готовое приложение с одной кнопкой скачивания
+
+Пользователь нажимает кнопку «Скачать ClipFlow» в README, получает `ClipFlow.dmg`, открывает его, переносит приложение в Applications и запускает. Xcode, Git и терминал на его Mac не нужны. DMG универсальный: Intel и Apple Silicon, macOS 14+.
+
+Кнопка ведёт на `../../releases/latest/download/ClipFlow.dmg`. Это относительная ссылка внутри вашего репозитория на GitHub: имя пользователя и репозитория в исходники подставлять не требуется. До публикации первого успешного Release скачать приложение по ней нельзя. Ссылка **Code → Download ZIP** по-прежнему скачивает исходники.
+
+## Первый выпуск с Windows
+
+1. Создайте GitHub-репозиторий и отправьте туда все файлы проекта, включая `.github` и `ClipFlow.xcodeproj`.
+2. Откройте вкладку **Actions** и workflow **Publish macOS app**.
+3. Нажмите **Run workflow**, выберите ветку с актуальными исходниками и введите `v1.0.0`.
+4. Дождитесь успешного окончания обеих задач: `build` и `publish`.
+5. В **Releases** появится **ClipFlow 1.0.0** с файлом **ClipFlow.dmg**. Кнопка в README теперь скачивает его напрямую.
+
+Сборку, XCTest, упаковку и публикацию выполняют серверы GitHub. Первый workflow Run нужно запускать из репозитория, в default branch которого уже есть файл `release.yml`. GitHub Actions должен быть разрешён настройками репозитория/организации. Для публичного скачивания без авторизации нужен публичный репозиторий; приватный требует доступа к нему.
+
+Вместо Run workflow можно отправить тег:
+
+```powershell
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+Для следующего выпуска используйте новую версию, например `v1.0.1`. Workflow не перезаписывает существующий Release. Версия в `Info.plist` при сборке автоматически берётся из тега, номер сборки — из GitHub run number. Если публикация не прошла и Release ещё не появился, тот же запуск можно повторить через Re-run jobs. Обычные push/PR только проверяют код; публикацию запускает тег `v*` или ручной запуск отдельного workflow.
+
+## Запуск и проверка Apple
+
+Упаковка в DMG сама по себе не устраняет проверку Gatekeeper. Варианты выпуска:
+
+| Конфигурация | Результат |
+|---|---|
+| Apple secrets не добавлены | Готовый DMG с локальной подписью для тестирования. macOS может блокировать первый запуск; пользователь должен самостоятельно разрешить его через Privacy & Security → Open Anyway, если доверяет источнику. |
+| Добавлены все Apple secrets | Приложение подписывается Developer ID, отправляется Apple на нотариализацию, получает stapled ticket. DMG тоже подписывается и нотариализуется. Workflow проверяет Gatekeeper перед публикацией. |
+| Secrets добавлены частично или подпись/нотаризация не прошла | Workflow завершается с ошибкой. Выпуск не публикуется; неподписанного fallback при ошибке настроенной подписи нет. |
+
+Для варианта «скачать и открыть без блокировки неизвестного разработчика» нужны действующая учётная запись Apple Developer Program, сертификат **Developer ID Application** с приватным ключом и доступ к нотариализации. Стандартное подтверждение первого открытия скачанного приложения macOS может показывать и после нотариализации. Accessibility для автоматической вставки пользователь разрешает отдельно — подпись это разрешение не выдаёт.
+
+## Однократная настройка подписи
+
+В GitHub откройте **Settings → Secrets and variables → Actions → New repository secret** и добавьте:
+
+| Secret | Значение |
+|---|---|
+| `MACOS_CERTIFICATE_P12_BASE64` | Base64 экспортированного `.p12`, содержащего Developer ID Application certificate **и приватный ключ**. |
+| `MACOS_CERTIFICATE_PASSWORD` | Непустой пароль `.p12`. |
+| `MACOS_SIGNING_IDENTITY` | Полное имя вида `Developer ID Application: Your Name (TEAMID)`. |
+| `APPLE_ID` | Apple ID учётной записи с доступом к нотариализации. |
+| `APPLE_APP_SPECIFIC_PASSWORD` | App-specific password для notarytool, не обычный пароль Apple ID. |
+| `APPLE_TEAM_ID` | Идентификатор вашей команды разработчика. |
+
+Секреты вводятся в GitHub, не в код, README или чат. Не коммитьте `.p12`, пароли, `.env` и приватные ключи. Исключения для этих файлов добавлены в `.gitignore`.
+
+Чтобы получить Base64 `.p12` на Windows, подставьте реальный путь и скопируйте результат в secret, не в файл репозитория:
+
+```powershell
+[Convert]::ToBase64String([IO.File]::ReadAllBytes('C:\Certificates\DeveloperID.p12')) | Set-Clipboard
+```
+
+Значения используются только в задаче упаковки, без их вывода в лог. Сертификат импортируется во временную keychain, которая удаляется после упаковки. Сертификаты и keychain не попадают в artifacts или DMG. При ошибках инструменты не печатают команды с паролями. Apple получает подписанный код для нотариализации; история буфера при этом не существует и никуда не передаётся.
+
+## Содержимое выпуска и проверки
+
+- `ClipFlow.dmg` — неизменное имя для прямой кнопки скачивания последнего релиза.
+- `SHA256SUMS.txt` — SHA-256 итогового DMG, вычисленный после подписи и stapling.
+- `manifest.json` — версия, тег, архитектуры, SHA-256 и факт Developer ID + нотариализации.
+
+До публикации выполняются: проверка проекта, Python-тесты инструментов выпуска, универсальная Release-сборка и XCTest. Упаковщик проверяет версию приложения и наличие обеих архитектур через `lipo`. Публикующая задача дополнительно проверяет SHA-256 и соответствие тега. Приложение в DMG проходит проверку codesign; при настроенных Apple credentials — также stapler и Gatekeeper.
+
+Тестовые artifacts из обычного workflow и загружаемый пользователем DMG — разные файлы. Изучать Actions или распаковывать вложенные artifact ZIP пользователю приложения не требуется.
+
+На Windows проверяются доступные проверки исходников и Python-логики:
+
+```powershell
+python scripts/validate_project.py
+python -m unittest discover -s scripts/tests -v
+```
+
+DMG, codesign, notarytool, Gatekeeper и Swift/XCTest выполняются только на Mac или macOS runner. Эти системные проверки в текущей Windows-среде не запускались.
+
+Документация: [прямые ссылки на Release assets](https://docs.github.com/en/repositories/releasing-projects-on-github/linking-to-releases), [создание Releases через GitHub CLI](https://cli.github.com/manual/gh_release_create), [Apple Developer ID](https://developer.apple.com/developer-id/), [нотаризация macOS-приложений](https://developer.apple.com/documentation/security/notarizing-macos-software-before-distribution).

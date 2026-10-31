@@ -1,0 +1,96 @@
+name: Publish macOS app
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag, for example v1.0.0 (use a new version for each release)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ inputs.version || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare version
+        id: version
+        env:
+          RELEASE_TAG: ${{ inputs.version || github.ref_name }}
+        run: python3 scripts/release_macos.py prepare --tag "$RELEASE_TAG" --github-output "$GITHUB_OUTPUT"
+      - name: Validate source and release tooling
+        run: |
+          python3 scripts/validate_project.py
+          python3 -m unittest discover -s scripts/tests -v
+      - name: Build universal application
+        env:
+          APP_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          xcodebuild -project ClipFlow.xcodeproj -scheme ClipFlow \
+            -configuration Release -destination 'generic/platform=macOS' \
+            -derivedDataPath build/ReleaseDerivedData \
+            ARCHS='arm64 x86_64' ONLY_ACTIVE_ARCH=NO \
+            MARKETING_VERSION="$APP_VERSION" CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" \
+            CODE_SIGNING_ALLOWED=NO build
+      - name: Run XCTest
+        run: |
+          xcodebuild -project ClipFlow.xcodeproj -scheme ClipFlow \
+            -configuration Debug -destination 'platform=macOS' \
+            -derivedDataPath build/TestDerivedData \
+            -resultBundlePath build/ReleaseTests.xcresult \
+            CODE_SIGNING_ALLOWED=NO test
+      - name: Package DMG and sign when Apple credentials are configured
+        env:
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+          MACOS_CERTIFICATE_P12_BASE64: ${{ secrets.MACOS_CERTIFICATE_P12_BASE64 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          python3 scripts/release_macos.py package --tag "$RELEASE_TAG" \
+            --app build/ReleaseDerivedData/Build/Products/Release/ClipFlow.app \
+            --output dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-assets
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: release-test-results
+          path: build/ReleaseTests.xcresult
+          if-no-files-found: ignore
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-assets
+          path: dist
+      - name: Publish downloadable application to GitHub Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.version || github.ref_name }}
+        run: |
+          python3 scripts/release_macos.py publish --tag "$RELEASE_TAG" \
+            --output dist --repository "$GITHUB_REPOSITORY" --commit "$GITHUB_SHA"
