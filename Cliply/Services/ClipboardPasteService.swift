@@ -113,19 +113,23 @@ final class ClipboardPasteService {
     }
 
     func paste(_ text: String, to target: PasteTarget?, closePanel: () -> Void) async -> PasteResult {
+        await paste(.text(text), to: target, closePanel: closePanel)
+    }
+
+    func paste(_ content: ClipboardContent, to target: PasteTarget?, closePanel: () -> Void) async -> PasteResult {
         guard !isPasting else { return .ignored }
         isPasting = true
         defer { isPasting = false }
-        guard await clipboard.restore(text) else { return .clipboardFailure }
+        guard await clipboard.restore(content) else { return .clipboardFailure }
         closePanel()
         guard let target, !target.isTerminated else {
-            return .manual("Text copied. Select a text field and press ⌘V.")
+            return .manual("Item copied. Select a compatible field and press ⌘V.")
         }
         guard environment.activate(target) else {
-            return .manual("Could not return to the original app. Text is ready for ⌘V.")
+            return .manual("Could not return to the original app. The item is ready for ⌘V.")
         }
         guard environment.canPostEvents else {
-            return .manual("Text copied. Press ⌘V to paste. Enable Accessibility in Cliply Settings for automatic paste.")
+            return .manual("Item copied. Press ⌘V to paste. Enable Accessibility in Cliply Settings for automatic paste.")
         }
 
         // Confirmation, not an arbitrary delay: two observations of the original foreground
@@ -137,20 +141,20 @@ final class ClipboardPasteService {
             if environment.frontmostPID == target.processIdentifier && environment.modifiersReleased {
                 confirmations += 1
                 if confirmations >= 2 {
-                    guard await clipboard.isRestoredTextCurrent(text) else {
+                    guard await clipboard.isRestoredContentCurrent(content) else {
                         return .manual("The clipboard changed before paste. The new clipboard was preserved; select your history item again to paste it.")
                     }
                     guard !Task.isCancelled, !target.isTerminated,
                           environment.frontmostPID == target.processIdentifier,
                           environment.restoreFocus(target), environment.frontmostPID == target.processIdentifier,
                           environment.postPaste(to: target) else {
-                        return .manual("Automatic paste was unavailable. Text is ready for ⌘V.")
+                        return .manual("Automatic paste was unavailable. The item is ready for ⌘V.")
                     }
                     return .posted
                 }
             } else { confirmations = 0 }
             await environment.waitForNextCheck()
         }
-        return .manual("The original app did not regain focus. Text is ready for ⌘V.")
+        return .manual("The original app did not regain focus. The item is ready for ⌘V.")
     }
 }

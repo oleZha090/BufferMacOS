@@ -4,17 +4,19 @@ import XCTest
 
 final class MemoryClipboard: ClipboardAccess {
     var changeCount = 0
-    var text: String?
+    var content: ClipboardContent?
+    var text: String? { content?.text }
     var writeSucceeds = true
     var reads = 0
     var ownWrite = false
     var afterWrite: (() -> Void)?
-    func copy(_ text: String?) { self.text = text; changeCount += 1; ownWrite = false }
-    func readText() -> String? { reads += 1; return ownWrite ? nil : text }
-    func isRestoredTextCurrent(_ text: String) -> Bool { ownWrite && self.text == text }
-    func replaceText(_ text: String) -> Bool {
+    func copy(_ text: String?) { copyContent(text.map(ClipboardContent.text)) }
+    func copyContent(_ content: ClipboardContent?) { self.content = content; changeCount += 1; ownWrite = false }
+    func readContent() -> ClipboardContent? { reads += 1; return ownWrite ? nil : content }
+    func isRestoredContentCurrent(_ content: ClipboardContent) -> Bool { ownWrite && self.content == content }
+    func replaceContent(_ content: ClipboardContent) -> Bool {
         guard writeSucceeds else { return false }
-        copy(text)
+        copyContent(content)
         ownWrite = true
         afterWrite?()
         return true
@@ -27,7 +29,7 @@ final class ClipboardMonitorTests: XCTestCase {
         clipboard.copy("Existing before launch")
         let tracker = ClipboardTracker(clipboard: clipboard)
         var values: [String] = []
-        tracker.onText = { values.append($0) }
+        tracker.onContent = { if let text = $0.text { values.append(text) } }
         tracker.poll(); tracker.poll()
         XCTAssertEqual(clipboard.reads, 0)
         clipboard.copy("new")
@@ -40,7 +42,7 @@ final class ClipboardMonitorTests: XCTestCase {
         let clipboard = MemoryClipboard()
         let tracker = ClipboardTracker(clipboard: clipboard)
         var values: [String] = []
-        tracker.onText = { values.append($0) }
+        tracker.onContent = { if let text = $0.text { values.append(text) } }
         for value in [nil, "", " \n", String(repeating: "a", count: 102401)] as [String?] {
             clipboard.copy(value); tracker.poll()
         }
@@ -51,7 +53,7 @@ final class ClipboardMonitorTests: XCTestCase {
         let clipboard = MemoryClipboard()
         let tracker = ClipboardTracker(clipboard: clipboard)
         var values: [String] = []
-        tracker.onText = { values.append($0) }
+        tracker.onContent = { if let text = $0.text { values.append(text) } }
         clipboard.copy("external")
         XCTAssertTrue(tracker.restore("selected"))
         tracker.poll()
@@ -75,7 +77,7 @@ final class ClipboardMonitorTests: XCTestCase {
         let clipboard = MemoryClipboard()
         let tracker = ClipboardTracker(clipboard: clipboard)
         var values: [String] = []
-        tracker.onText = { values.append($0) }
+        tracker.onContent = { if let text = $0.text { values.append(text) } }
         clipboard.afterWrite = { [weak clipboard] in clipboard?.copy("external during write") }
         XCTAssertTrue(tracker.restore("selected"))
         tracker.poll()

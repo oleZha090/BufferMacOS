@@ -6,13 +6,13 @@ final class ClipboardHistoryTests: XCTestCase {
     func testFirstItemPreservesOriginalText() {
         let history = ClipboardHistoryService()
         history.add("  Hello\nWorld 🌍  ")
-        XCTAssertEqual(history.items.map(\.text), ["  Hello\nWorld 🌍  "])
+        XCTAssertEqual(history.items.compactMap(\.text), ["  Hello\nWorld 🌍  "])
     }
 
     func testTenItemsAreNewestFirst() {
         let history = ClipboardHistoryService()
         for index in 1...10 { history.add("Text \(index)") }
-        XCTAssertEqual(history.items.map(\.text), (1...10).reversed().map { "Text \($0)" })
+        XCTAssertEqual(history.items.compactMap(\.text), (1...10).reversed().map { "Text \($0)" })
     }
 
     func testEleventhEvictsOldestAndCapacityNeverExceeded() {
@@ -31,7 +31,7 @@ final class ClipboardHistoryTests: XCTestCase {
         history.add("two")
         let newTime = Date(timeIntervalSince1970: 3)
         history.add("one", at: newTime)
-        XCTAssertEqual(history.items.map(\.text), ["one", "two"])
+        XCTAssertEqual(history.items.compactMap(\.text), ["one", "two"])
         XCTAssertEqual(history.items[0].id, originalID)
         XCTAssertEqual(history.items[0].copiedAt, newTime)
     }
@@ -48,7 +48,7 @@ final class ClipboardHistoryTests: XCTestCase {
         let history = ClipboardHistoryService()
         history.add("a"); history.add("b")
         history.remove(history.items[1].id)
-        XCTAssertEqual(history.items.map(\.text), ["b"])
+        XCTAssertEqual(history.items.compactMap(\.text), ["b"])
         history.clear()
         XCTAssertTrue(history.items.isEmpty)
     }
@@ -56,7 +56,7 @@ final class ClipboardHistoryTests: XCTestCase {
     func testSearchIsCaseInsensitiveAndDoesNotMutateHistory() {
         let history = ClipboardHistoryService()
         history.add("Привет Swift"); history.add("Second\nline")
-        XCTAssertEqual(history.matching("ПРИВЕТ").map(\.text), ["Привет Swift"])
+        XCTAssertEqual(history.matching("ПРИВЕТ").compactMap(\.text), ["Привет Swift"])
         XCTAssertEqual(history.matching("LINE").count, 1)
         XCTAssertEqual(history.matching("").count, 2)
         XCTAssertEqual(history.matching("missing").count, 0)

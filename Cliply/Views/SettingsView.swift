@@ -63,10 +63,10 @@ struct SettingsView: View {
 
             Form {
                 Section(preferences.text("Private by design")) {
-                    Text(preferences.text("The last 10 text items live only in this process's memory. Cliply does not save history to disk, send it over the network, or collect analytics."))
+                    Text(preferences.text("Text and image history lives only in this process's memory. Cliply does not save it to disk, send it over the network, or collect analytics."))
                     Text(preferences.text("History disappears when Cliply quits. This does not guarantee physical erasure from system memory or swap."))
                         .font(.caption).foregroundStyle(.secondary)
-                    Text(preferences.text("Items marked concealed or transient by their source app are ignored. History stores text up to 100 KB; images and files are not collected."))
+                    Text(preferences.text("Concealed or transient items are ignored. Limits: 100 KB per text, 64 MB and 40 megapixels per image, 10 items and 128 MB per history. Other files are not collected."))
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 Section(preferences.text("Automatic paste")) {

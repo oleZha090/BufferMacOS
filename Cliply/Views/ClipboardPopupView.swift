@@ -58,7 +58,7 @@ struct ClipboardPopupView: View {
                         .font(.system(size: 30, weight: .light)).foregroundStyle(.secondary)
                     Text(preferences.text(model.query.isEmpty ? "Your clipboard, a little more useful" : "No matches"))
                         .font(.headline)
-                    Text(preferences.text(model.query.isEmpty ? "Copy some text in any app. Your last 10 items will appear here." : "Try a different search."))
+                    Text(preferences.text(model.query.isEmpty ? "Copy text or an image in any app. Your last 10 items will appear here." : "Try a different search."))
                         .font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)

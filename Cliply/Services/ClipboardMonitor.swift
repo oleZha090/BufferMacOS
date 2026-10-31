@@ -1,11 +1,19 @@
 import AppKit
+import ImageIO
+import UniformTypeIdentifiers
 
 // Access and tracking are confined to the worker queue. UI never reads pasteboard contents.
 protocol ClipboardAccess: AnyObject {
     var changeCount: Int { get }
-    func readText() -> String?
-    func replaceText(_ text: String) -> Bool
-    func isRestoredTextCurrent(_ text: String) -> Bool
+    func readContent() -> ClipboardContent?
+    func replaceContent(_ content: ClipboardContent) -> Bool
+    func isRestoredContentCurrent(_ content: ClipboardContent) -> Bool
+}
+
+extension ClipboardAccess {
+    func readText() -> String? { readContent()?.text }
+    func replaceText(_ text: String) -> Bool { replaceContent(.text(text)) }
+    func isRestoredTextCurrent(_ text: String) -> Bool { isRestoredContentCurrent(.text(text)) }
 }
 
 final class SystemClipboard: ClipboardAccess {
@@ -19,12 +27,27 @@ final class SystemClipboard: ClipboardAccess {
     init(pasteboard: NSPasteboard = .general) { self.pasteboard = pasteboard }
     var changeCount: Int { pasteboard.changeCount }
 
-    func readText() -> String? {
+    func readContent() -> ClipboardContent? {
         guard let types = pasteboard.types,
               !ignoredTypes.contains(where: types.contains),
-              !types.contains(Self.restoredType),
-              !types.contains(.fileURL) else { return nil }
-        // Inspect byte size before decoding. Do not ask AppKit to convert images/files to text.
+              !types.contains(Self.restoredType) else { return nil }
+        // Finder can include a file's icon as an image flavor. Snapshot the actual file
+        // first, so a copied photograph does not turn into a small generic file icon.
+        if types.contains(.fileURL) { return readImageFile() }
+        let item = pasteboard.pasteboardItems?.first
+        let itemTypes = item?.types ?? types
+        let orderedImageTypes = [NSPasteboard.PasteboardType.png, .tiff] + itemTypes.filter { $0 != .png && $0 != .tiff }
+        var representations: [String: Data] = [:]
+        var totalBytes = 0
+        for type in orderedImageTypes where itemTypes.contains(type) {
+            guard UTType(type.rawValue)?.conforms(to: .image) == true,
+                  let data = item?.data(forType: type) ?? pasteboard.data(forType: type),
+                  !data.isEmpty, data.count <= ClipboardLimits.imageBytes - totalBytes else { continue }
+            representations[type.rawValue] = data
+            totalBytes += data.count
+        }
+        // Prefer pixels over a browser's accompanying URL or filename string.
+        if let image = ClipboardImage.make(representations: representations) { return .image(image) }
         let urlType = NSPasteboard.PasteboardType("public.url")
         let textType: NSPasteboard.PasteboardType
         if types.contains(.string) { textType = .string }
@@ -32,19 +55,54 @@ final class SystemClipboard: ClipboardAccess {
         else { return nil }
         guard let data = pasteboard.data(forType: textType),
               data.count <= ClipboardHistoryService.maximumBytes else { return nil }
-        return String(data: data, encoding: .utf8)
+        return String(data: data, encoding: .utf8).map(ClipboardContent.text)
     }
 
-    func replaceText(_ text: String) -> Bool {
-        // Keep all original representations in RAM for rollback if writing fails.
-        let backup: [[NSPasteboard.PasteboardType: Data]] = (pasteboard.pasteboardItems ?? []).map { item in
-            var values: [NSPasteboard.PasteboardType: Data] = [:]
-            for type in item.types { if let data = item.data(forType: type) { values[type] = data } }
-            return values
-        }
+    private func readImageFile() -> ClipboardContent? {
+        guard pasteboard.pasteboardItems?.count == 1,
+              let value = pasteboard.string(forType: .fileURL), let url = URL(string: value), url.isFileURL,
+              let metadata = try? url.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey, .contentTypeKey]),
+              metadata.isRegularFile == true, metadata.contentType?.conforms(to: .image) == true,
+              let size = metadata.fileSize, size > 0, size <= ClipboardLimits.imageBytes,
+              let file = try? FileHandle(forReadingFrom: url) else { return nil }
+        defer { try? file.close() }
+        // Snapshot bytes now, so history still works if the file is moved or deleted later.
+        guard let data = try? file.read(upToCount: ClipboardLimits.imageBytes + 1),
+              !data.isEmpty, data.count <= ClipboardLimits.imageBytes,
+              let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let type = CGImageSourceGetType(source),
+              let image = ClipboardImage.make(representations: [type as String: data], sourceName: url.lastPathComponent) else { return nil }
+        return .image(image)
+    }
+
+    func replaceContent(_ content: ClipboardContent) -> Bool {
+        guard content.isSupported else { return false }
         let replacement = NSPasteboardItem()
-        guard replacement.setString(text, forType: .string),
-              replacement.setData(Data(), forType: Self.restoredType) else { return false }
+        switch content {
+        case .text(let text):
+            guard replacement.setString(text, forType: .string) else { return false }
+        case .image(let image):
+            for (type, data) in image.representations {
+                guard replacement.setData(data, forType: NSPasteboard.PasteboardType(type)) else { return false }
+            }
+        }
+        guard replacement.setData(Data(), forType: Self.restoredType) else { return false }
+        // Keep all original representations in RAM for rollback if writing fails.
+        let backupChangeCount = pasteboard.changeCount
+        var backup: [[NSPasteboard.PasteboardType: Data]] = []
+        var backupBytes = 0
+        for item in pasteboard.pasteboardItems ?? [] {
+            var values: [NSPasteboard.PasteboardType: Data] = [:]
+            for type in item.types {
+                if let data = item.data(forType: type) {
+                    guard data.count <= ClipboardLimits.historyBytes - backupBytes else { return false }
+                    values[type] = data
+                    backupBytes += data.count
+                }
+            }
+            backup.append(values)
+        }
+        guard pasteboard.changeCount == backupChangeCount else { return false }
         let ownCount = pasteboard.clearContents()
         if pasteboard.writeObjects([replacement]) { return true }
         // Another application may have copied something meanwhile. Never overwrite that copy.
@@ -59,10 +117,17 @@ final class SystemClipboard: ClipboardAccess {
         return false
     }
 
-    func isRestoredTextCurrent(_ text: String) -> Bool {
+    func isRestoredContentCurrent(_ content: ClipboardContent) -> Bool {
         let count = pasteboard.changeCount
-        guard pasteboard.types?.contains(Self.restoredType) == true,
-              pasteboard.string(forType: .string) == text else { return false }
+        guard pasteboard.types?.contains(Self.restoredType) == true else { return false }
+        switch content {
+        case .text(let text):
+            guard pasteboard.string(forType: .string) == text else { return false }
+        case .image(let image):
+            for (type, data) in image.representations {
+                guard pasteboard.data(forType: NSPasteboard.PasteboardType(type)) == data else { return false }
+            }
+        }
         return pasteboard.changeCount == count
     }
 }
@@ -70,7 +135,7 @@ final class SystemClipboard: ClipboardAccess {
 final class ClipboardTracker {
     private let clipboard: ClipboardAccess
     private var lastCount: Int
-    var onText: ((String) -> Void)?
+    var onContent: ((ClipboardContent) -> Void)?
 
     init(clipboard: ClipboardAccess) {
         self.clipboard = clipboard
@@ -81,27 +146,31 @@ final class ClipboardTracker {
         let count = clipboard.changeCount
         guard count != lastCount else { return }
         lastCount = count
-        guard let text = clipboard.readText(), clipboard.changeCount == count,
-              !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-              text.utf8.count <= ClipboardHistoryService.maximumBytes else { return }
-        onText?(text)
+        guard let content = clipboard.readContent(), clipboard.changeCount == count, content.isSupported else { return }
+        onContent?(content)
     }
 
-    func restore(_ text: String) -> Bool {
+    func restore(_ content: ClipboardContent) -> Bool {
         poll() // Capture a pending external copy before replacing it.
-        // Own writes carry a marker and readText ignores them. Do not take a fresh changeCount
+        // Own writes carry a marker and readContent ignores them. Do not take a fresh changeCount
         // here: a racing copy from another application must still be detected on the next poll.
-        return clipboard.replaceText(text)
+        return clipboard.replaceContent(content)
     }
+
+    func restore(_ text: String) -> Bool { restore(.text(text)) }
 
     func discardCurrentChange() { lastCount = clipboard.changeCount }
-    func isRestoredTextCurrent(_ text: String) -> Bool { clipboard.isRestoredTextCurrent(text) }
+    func isRestoredContentCurrent(_ content: ClipboardContent) -> Bool { clipboard.isRestoredContentCurrent(content) }
 }
 
 @MainActor
 protocol ClipboardWriting: AnyObject {
-    func restore(_ text: String) async -> Bool
-    func isRestoredTextCurrent(_ text: String) async -> Bool
+    func restore(_ content: ClipboardContent) async -> Bool
+    func isRestoredContentCurrent(_ content: ClipboardContent) async -> Bool
+}
+
+extension ClipboardWriting {
+    func restore(_ text: String) async -> Bool { await restore(.text(text)) }
 }
 
 @MainActor
@@ -114,8 +183,8 @@ final class ClipboardMonitor: ClipboardWriting {
     init(history: ClipboardHistoryService) {
         self.history = history
         tracker = ClipboardTracker(clipboard: SystemClipboard())
-        tracker.onText = { [weak history] text in
-            DispatchQueue.main.async { history?.add(text) }
+        tracker.onContent = { [weak history] content in
+            DispatchQueue.main.async { history?.add(content) }
         }
     }
 
@@ -146,17 +215,17 @@ final class ClipboardMonitor: ClipboardWriting {
         }
     }
 
-    func restore(_ text: String) async -> Bool {
+    func restore(_ content: ClipboardContent) async -> Bool {
         let tracker = tracker
         return await withCheckedContinuation { continuation in
-            queue.async { continuation.resume(returning: autoreleasepool { tracker.restore(text) }) }
+            queue.async { continuation.resume(returning: autoreleasepool { tracker.restore(content) }) }
         }
     }
 
-    func isRestoredTextCurrent(_ text: String) async -> Bool {
+    func isRestoredContentCurrent(_ content: ClipboardContent) async -> Bool {
         let tracker = tracker
         return await withCheckedContinuation { continuation in
-            queue.async { continuation.resume(returning: autoreleasepool { tracker.isRestoredTextCurrent(text) }) }
+            queue.async { continuation.resume(returning: autoreleasepool { tracker.isRestoredContentCurrent(content) }) }
         }
     }
 

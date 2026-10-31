@@ -82,13 +82,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let originalTarget = target
         pasteTask = Task { [weak self] in
             guard let self else { return }
-            let result = await pasteService.paste(item.text, to: originalTarget) { [weak self] in self?.windows.dismiss() }
+            let result = await pasteService.paste(item.content, to: originalTarget) { [weak self] in self?.windows.dismiss() }
             viewModel.isProcessing = false
             switch result {
             case .manual(let message): windows.showHint(message)
             case .clipboardFailure:
                 viewModel.errorMessage = "Could not update the system clipboard. Your history entry is preserved. Try again."
-                if !windows.isVisible { windows.showHint("Could not copy the selected text. The history entry is preserved.") }
+                if !windows.isVisible { windows.showHint("Could not copy the selected item. The history entry is preserved.") }
             case .posted, .ignored: break
             }
             pasteTask = nil

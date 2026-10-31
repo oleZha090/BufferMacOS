@@ -9,16 +9,17 @@ final class TestPasteTarget: PasteTarget {
 
 @MainActor
 final class TestClipboardWriter: ClipboardWriting {
-    var texts: [String] = []
+    var contents: [ClipboardContent] = []
+    var texts: [String] { contents.compactMap(\.text) }
     var succeeds = true
     var yields = false
     var current = true
-    func restore(_ text: String) async -> Bool {
-        texts.append(text)
+    func restore(_ content: ClipboardContent) async -> Bool {
+        contents.append(content)
         if yields { await Task.yield() }
         return succeeds
     }
-    func isRestoredTextCurrent(_ text: String) async -> Bool { current && texts.last == text }
+    func isRestoredContentCurrent(_ content: ClipboardContent) async -> Bool { current && contents.last == content }
 }
 
 @MainActor
@@ -52,6 +53,34 @@ final class TestPasteEnvironment: PasteEnvironment {
 
 @MainActor
 final class ClipboardPasteTests: XCTestCase {
+    func testImageSelectionClosesPanelAndPostsOnceToOriginalApp() async throws {
+        let writer = TestClipboardWriter()
+        let environment = TestPasteEnvironment()
+        let service = ClipboardPasteService(clipboard: writer, environment: environment)
+        let content = ClipboardContent.image(try ClipboardImageFixture.image())
+        var closes = 0
+        let result = await service.paste(content, to: TestPasteTarget()) { closes += 1 }
+        XCTAssertEqual(result, .posted)
+        XCTAssertEqual(writer.contents, [content])
+        XCTAssertTrue(writer.texts.isEmpty)
+        XCTAssertEqual(environment.posted, [42])
+        XCTAssertEqual(closes, 1)
+    }
+
+    func testImageWithoutPermissionIsKeptForManualPaste() async throws {
+        let writer = TestClipboardWriter()
+        let environment = TestPasteEnvironment()
+        environment.canPostEvents = false
+        let service = ClipboardPasteService(clipboard: writer, environment: environment)
+        let content = ClipboardContent.image(try ClipboardImageFixture.image())
+        var closed = false
+        let result = await service.paste(content, to: TestPasteTarget()) { closed = true }
+        guard case .manual = result else { return XCTFail("Expected manual image paste") }
+        XCTAssertEqual(writer.contents, [content])
+        XCTAssertTrue(closed)
+        XCTAssertTrue(environment.posted.isEmpty)
+    }
+
     func testWaitsForOriginalAppThenPostsExactlyOnceAfterClosingPanel() async {
         let writer = TestClipboardWriter()
         let environment = TestPasteEnvironment()

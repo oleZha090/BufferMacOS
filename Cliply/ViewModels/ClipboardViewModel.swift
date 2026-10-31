@@ -17,7 +17,7 @@ final class ClipboardViewModel: ObservableObject {
         self.history = history
         subscription = history.$items.sink { [weak self] items in
             guard let self else { return }
-            let visible = self.query.isEmpty ? items : items.filter { $0.text.localizedCaseInsensitiveContains(self.query) }
+            let visible = items.filter { $0.content.matches(self.query) }
             if !visible.contains(where: { $0.id == self.selectedID }) { self.selectedID = visible.first?.id }
             self.objectWillChange.send()
         }
