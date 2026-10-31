@@ -31,7 +31,7 @@ struct SettingsView: View {
                     LabeledContent(preferences.text("Status"), value: preferences.text(login.statusLabel))
                     if login.needsApproval { Button(preferences.text("Open Login Items Settings"), action: login.openSettings) }
                     if let code = login.errorCode {
-                        Text(preferences.text("Launch at Login could not be updated (%d). Try again in System Settings.", code)).foregroundStyle(.red)
+                        Text(preferences.text("Launch at Login could not be updated (%@). Try again in System Settings.", String(code))).foregroundStyle(.red)
                     }
                 }
                 Section(preferences.text("Clipboard")) {

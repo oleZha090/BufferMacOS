@@ -73,12 +73,31 @@ final class PresentationPreferencesTests: XCTestCase {
         let error = HotkeyError.registration(-9878)
         let shortcut = HotkeyConfiguration(keyCode: 49, modifiers: UInt32(cmdKey), keyLabel: "Space")
         preferences.language = .russian
-        XCTAssertTrue(preferences.hotkeyError(error).contains("Не удалось"))
-        XCTAssertTrue(preferences.hotkeyError(error).contains("-9878"))
+        XCTAssertEqual(preferences.hotkeyError(error), "Не удалось зарегистрировать сочетание (-9878). Возможно, оно занято macOS или другим приложением. Выберите другое.")
         XCTAssertEqual(preferences.shortcutLabel(shortcut), "⌘Пробел")
         preferences.language = .english
-        XCTAssertTrue(preferences.hotkeyError(error).contains("could not be registered"))
+        XCTAssertEqual(preferences.hotkeyError(error), "This shortcut could not be registered (-9878). It may be in use by macOS or another app. Choose another shortcut.")
         XCTAssertEqual(preferences.shortcutLabel(shortcut), "⌘Space")
+    }
+
+    func testDiagnosticCodesKeepExactDigitsAndSignInBothLanguages() {
+        let (defaults, suite) = isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let preferences = PresentationPreferences(defaults: defaults)
+        for language in [AppLanguage.russian, .english] {
+            preferences.language = language
+            for code in [Int32.min, -9878, 0, Int32.max] {
+                let message = preferences.hotkeyError(HotkeyError.registration(code))
+                XCTAssertTrue(message.contains("(\(code))"), message)
+            }
+            // NSError uses a platform-sized Int, which must not be truncated to printf's %d.
+            for code in [Int.min, -1234567, 1234567, Int.max] {
+                let message = preferences.hotkeyError(NSError(domain: "CliplyTests", code: code))
+                XCTAssertTrue(message.contains("(\(code))"), message)
+            }
+            let loginError = preferences.text("Launch at Login could not be updated (%@). Try again in System Settings.", String(-1234567))
+            XCTAssertTrue(loginError.contains("(-1234567)"), loginError)
+        }
     }
 
     func testExplicitThemesMapToNativeAppearancesAndSystemRemovesOverride() {

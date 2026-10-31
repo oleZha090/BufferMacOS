@@ -86,9 +86,11 @@ final class PresentationPreferences: ObservableObject {
         case HotkeyError.invalid:
             return text("Use Command, Option or Control together with a non-modifier key.")
         case HotkeyError.registration(let code):
-            return text("This shortcut could not be registered (%d). It may be in use by macOS or another app. Choose another shortcut.", Int(code))
+            // Diagnostic codes are identifiers, not localized quantities. Keep their ASCII
+            // sign and digits intact instead of applying the locale's number formatting.
+            return text("This shortcut could not be registered (%@). It may be in use by macOS or another app. Choose another shortcut.", String(code))
         default:
-            return text("Could not save the shortcut (%d). Try again.", (error as NSError).code)
+            return text("Could not save the shortcut (%@). Try again.", String((error as NSError).code))
         }
     }
 }

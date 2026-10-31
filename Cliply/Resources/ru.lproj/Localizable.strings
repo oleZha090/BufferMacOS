@@ -16,7 +16,7 @@
 "Application registration unavailable" = "Регистрация приложения недоступна";
 "Unknown status" = "Неизвестное состояние";
 "Open Login Items Settings" = "Открыть настройки объектов входа";
-"Launch at Login could not be updated (%d). Try again in System Settings." = "Не удалось изменить автозапуск (%d). Попробуйте в системных настройках.";
+"Launch at Login could not be updated (%@). Try again in System Settings." = "Не удалось изменить автозапуск (%@). Попробуйте в системных настройках.";
 "Clipboard" = "Буфер обмена";
 "History" = "История";
 "%d / 10 items" = "Записей: %d / 10";
@@ -74,8 +74,8 @@
 "Press a shortcut. Escape cancels." = "Нажмите сочетание клавиш. Escape — отмена.";
 "Record shortcut, currently %@" = "Записать сочетание, сейчас %@";
 "Use Command, Option or Control together with a non-modifier key." = "Используйте Command, Option или Control вместе с обычной клавишей.";
-"This shortcut could not be registered (%d). It may be in use by macOS or another app. Choose another shortcut." = "Не удалось зарегистрировать сочетание (%d). Возможно, оно занято macOS или другим приложением. Выберите другое.";
-"Could not save the shortcut (%d). Try again." = "Не удалось сохранить сочетание (%d). Попробуйте ещё раз.";
+"This shortcut could not be registered (%@). It may be in use by macOS or another app. Choose another shortcut." = "Не удалось зарегистрировать сочетание (%@). Возможно, оно занято macOS или другим приложением. Выберите другое.";
+"Could not save the shortcut (%@). Try again." = "Не удалось сохранить сочетание (%@). Попробуйте ещё раз.";
 "Could not update the system clipboard. Your history entry is preserved. Try again." = "Не удалось обновить системный буфер обмена. Запись в истории сохранена. Попробуйте ещё раз.";
 "Could not copy the selected text. The history entry is preserved." = "Не удалось скопировать выбранный текст. Запись в истории сохранена.";
 "Text copied. Select a text field and press ⌘V." = "Текст скопирован. Выберите поле ввода и нажмите ⌘V.";

@@ -16,7 +16,7 @@
 "Application registration unavailable" = "Application registration unavailable";
 "Unknown status" = "Unknown status";
 "Open Login Items Settings" = "Open Login Items Settings";
-"Launch at Login could not be updated (%d). Try again in System Settings." = "Launch at Login could not be updated (%d). Try again in System Settings.";
+"Launch at Login could not be updated (%@). Try again in System Settings." = "Launch at Login could not be updated (%@). Try again in System Settings.";
 "Clipboard" = "Clipboard";
 "History" = "History";
 "%d / 10 items" = "%d / 10 items";
@@ -74,8 +74,8 @@
 "Press a shortcut. Escape cancels." = "Press a shortcut. Escape cancels.";
 "Record shortcut, currently %@" = "Record shortcut, currently %@";
 "Use Command, Option or Control together with a non-modifier key." = "Use Command, Option or Control together with a non-modifier key.";
-"This shortcut could not be registered (%d). It may be in use by macOS or another app. Choose another shortcut." = "This shortcut could not be registered (%d). It may be in use by macOS or another app. Choose another shortcut.";
-"Could not save the shortcut (%d). Try again." = "Could not save the shortcut (%d). Try again.";
+"This shortcut could not be registered (%@). It may be in use by macOS or another app. Choose another shortcut." = "This shortcut could not be registered (%@). It may be in use by macOS or another app. Choose another shortcut.";
+"Could not save the shortcut (%@). Try again." = "Could not save the shortcut (%@). Try again.";
 "Could not update the system clipboard. Your history entry is preserved. Try again." = "Could not update the system clipboard. Your history entry is preserved. Try again.";
 "Could not copy the selected text. The history entry is preserved." = "Could not copy the selected text. The history entry is preserved.";
 "Text copied. Select a text field and press ⌘V." = "Text copied. Select a text field and press ⌘V.";
