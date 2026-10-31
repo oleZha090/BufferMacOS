@@ -17,7 +17,7 @@ import subprocess
 import sys
 import tempfile
 
-DMG_NAME = "ClipFlow.dmg"
+DMG_NAME = "Cliply.dmg"
 SIGNING_KEYS = (
     "MACOS_CERTIFICATE_P12_BASE64", "MACOS_CERTIFICATE_PASSWORD",
     "MACOS_SIGNING_IDENTITY", "APPLE_ID", "APPLE_APP_SPECIFIC_PASSWORD", "APPLE_TEAM_ID",
@@ -110,13 +110,13 @@ def release_notes(version, signed):
         "Если вы доверяете этой сборке, разрешите её запуск в "
         "System Settings → Privacy & Security → Open Anyway."
     )
-    return f"""ClipFlow {version} для macOS 14 и новее, Intel и Apple Silicon.
+    return f"""Cliply {version} для macOS 14 и новее, Intel и Apple Silicon.
 
-**[Скачать ClipFlow.dmg](ClipFlow.dmg)** — готовое приложение, Xcode не нужен.
+**[Скачать Cliply.dmg](Cliply.dmg)** — готовое приложение, Xcode не нужен.
 
-1. Откройте скачанный DMG и перетащите ClipFlow в Applications.
-2. Запустите ClipFlow из Applications. Значок появится в строке меню.
-3. Для автоматической вставки включите Accessibility в настройках ClipFlow.
+1. Откройте скачанный DMG и перетащите Cliply в Applications.
+2. Запустите Cliply из Applications. Значок появится в строке меню.
+3. Для автоматической вставки включите Accessibility в настройках Cliply.
 
 {status}
 
@@ -135,33 +135,35 @@ def package(tag, app, output):
         info = plistlib.load(handle)
     if info.get("CFBundleShortVersionString") != version:
         raise ValueError("Application version does not match the release tag.")
-    if info.get("CFBundleExecutable") != "ClipFlow" or info.get("CFBundleIdentifier") != "app.clipflow.ClipFlow":
-        raise ValueError("Expected the ClipFlow application bundle.")
-    architectures = set(run("lipo", "-archs", app / "Contents/MacOS/ClipFlow").split())
+    if info.get("CFBundleExecutable") != "Cliply" or info.get("CFBundleIdentifier") != "app.clipflow.ClipFlow":
+        raise ValueError("Expected the Cliply application bundle.")
+    if info.get("CFBundleIconName") != "AppIcon" or not (app / "Contents/Resources/AppIcon.icns").is_file():
+        raise ValueError("Cliply's compiled app icon is missing. Refusing to publish an unbranded application.")
+    architectures = set(run("lipo", "-archs", app / "Contents/MacOS/Cliply").split())
     if architectures != {"arm64", "x86_64"}:
         raise ValueError("A release must contain both arm64 and x86_64.")
     output.mkdir(parents=True, exist_ok=True)
     dmg = output / DMG_NAME
     if dmg.exists():
         raise ValueError("Release DMG already exists. Use an empty output directory.")
-    with tempfile.TemporaryDirectory(prefix="clipflow-release-") as temporary:
+    with tempfile.TemporaryDirectory(prefix="cliply-release-") as temporary:
         temporary = Path(temporary)
         stage = temporary / "volume"
         stage.mkdir()
-        staged_app = stage / "ClipFlow.app"
+        staged_app = stage / "Cliply.app"
         run("ditto", app, staged_app)
         (stage / "Applications").symlink_to("/Applications", target_is_directory=True)
         with signing_keychain(configuration, temporary) as keychain:
             sign(staged_app, configuration, keychain, application=True)
             if configuration:
-                notary_zip = temporary / "ClipFlow-notarization.zip"
+                notary_zip = temporary / "Cliply-notarization.zip"
                 run("ditto", "-c", "-k", "--sequesterRsrc", "--keepParent", staged_app, notary_zip)
                 notarize(notary_zip, configuration)
                 run("xcrun", "stapler", "staple", staged_app)
                 run("xcrun", "stapler", "validate", staged_app)
                 run("spctl", "--assess", "--type", "execute", "--verbose=2", staged_app)
             (stage / "Installation.txt").write_text(release_notes(version, bool(configuration)), encoding="utf-8")
-            run("hdiutil", "create", "-volname", "ClipFlow", "-srcfolder", stage, "-format", "UDZO", dmg)
+            run("hdiutil", "create", "-volname", "Cliply", "-srcfolder", stage, "-format", "UDZO", dmg)
             sign(dmg, configuration, keychain)
             if configuration:
                 notarize(dmg, configuration)
@@ -203,7 +205,7 @@ def publish(tag, output, repository, commit):
     notes_file.write_text(notes, encoding="utf-8")
     # Do not clobber existing assets or tags. GitHub rejects a duplicate release.
     run("gh", "release", "create", tag, output / DMG_NAME, output / "SHA256SUMS.txt", output / "manifest.json",
-        "--repo", repository, "--target", commit, "--title", f"ClipFlow {manifest['version']}",
+        "--repo", repository, "--target", commit, "--title", f"Cliply {manifest['version']}",
         "--notes-file", notes_file)
     print(f"Published https://github.com/{repository}/releases/tag/{tag}")
 

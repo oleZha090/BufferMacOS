@@ -18,27 +18,27 @@ jobs:
         run: python3 -m unittest discover -s scripts/tests -v
       - name: Build universal macOS app
         run: >-
-          xcodebuild -project ClipFlow.xcodeproj -scheme ClipFlow
+          xcodebuild -project Cliply.xcodeproj -scheme Cliply
           -configuration Release -destination 'generic/platform=macOS'
           -derivedDataPath build/DerivedData
           ARCHS='arm64 x86_64' ONLY_ACTIVE_ARCH=NO
           CODE_SIGNING_ALLOWED=NO build
       - name: Run unit tests
         run: >-
-          xcodebuild -project ClipFlow.xcodeproj -scheme ClipFlow
+          xcodebuild -project Cliply.xcodeproj -scheme Cliply
           -configuration Debug -destination 'platform=macOS'
           -derivedDataPath build/TestDerivedData
-          -resultBundlePath build/ClipFlowTests.xcresult
+          -resultBundlePath build/CliplyTests.xcresult
           CODE_SIGNING_ALLOWED=NO test
       - name: Package application
-        run: ditto -c -k --sequesterRsrc --keepParent build/DerivedData/Build/Products/Release/ClipFlow.app build/ClipFlow-macOS-universal.zip
+        run: ditto -c -k --sequesterRsrc --keepParent build/DerivedData/Build/Products/Release/Cliply.app build/Cliply-macOS-universal.zip
       - uses: actions/upload-artifact@v4
         with:
-          name: ClipFlow-macOS-universal
-          path: build/ClipFlow-macOS-universal.zip
+          name: Cliply-macOS-universal
+          path: build/Cliply-macOS-universal.zip
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: ClipFlow-test-results
-          path: build/ClipFlowTests.xcresult
+          name: Cliply-test-results
+          path: build/CliplyTests.xcresult
           if-no-files-found: ignore

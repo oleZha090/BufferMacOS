@@ -45,7 +45,7 @@ class ReleaseTests(unittest.TestCase):
             self.assets(directory)
             (directory / release.DMG_NAME).write_bytes(b"changed bytes")
             with patch.object(release, "run") as run, self.assertRaisesRegex(ValueError, "checksum"):
-                release.publish("v1.2.3", directory, "example/ClipFlow", "a" * 40)
+                release.publish("v1.2.3", directory, "example/Cliply", "a" * 40)
             run.assert_not_called()
 
     def test_wrong_tag_or_nonuniversal_app_is_not_published(self):
@@ -64,14 +64,14 @@ class ReleaseTests(unittest.TestCase):
             directory = Path(temporary)
             self.assets(directory)
             with patch.object(release, "run") as run, patch("builtins.print"):
-                release.publish("v1.2.3", directory, "example/ClipFlow", "a" * 40)
+                release.publish("v1.2.3", directory, "example/Cliply", "a" * 40)
             command = run.call_args.args
             self.assertEqual(command[:4], ("gh", "release", "create", "v1.2.3"))
-            self.assertIn(directory / "ClipFlow.dmg", command)
+            self.assertIn(directory / "Cliply.dmg", command)
             self.assertIn("--notes-file", command)
             self.assertNotIn("--clobber", command)
             notes = (directory / "release-notes.md").read_text(encoding="utf-8")
-            self.assertIn("https://github.com/example/ClipFlow/releases/download/v1.2.3/ClipFlow.dmg", notes)
+            self.assertIn("https://github.com/example/Cliply/releases/download/v1.2.3/Cliply.dmg", notes)
             self.assertIn("без нотариализации", notes)
             self.assertNotIn("Проверка Gatekeeper пройдена", notes)
 
@@ -93,7 +93,7 @@ class ReleaseTests(unittest.TestCase):
     def test_readme_button_targets_stable_release_filename(self):
         root = SCRIPT.parent.parent
         readme = (root / "README.md").read_text(encoding="utf-8")
-        self.assertIn('href="../../releases/latest/download/ClipFlow.dmg"', readme)
+        self.assertIn('href="../../releases/latest/download/Cliply.dmg"', readme)
         self.assertTrue((root / "docs/download-macos.svg").is_file())
         self.assertIn("Проверка Gatekeeper пройдена", release.release_notes("1.2.3", True))
 
@@ -102,11 +102,13 @@ class ReleaseTests(unittest.TestCase):
         # on Windows too. Real codesign/hdiutil execution still belongs to macOS CI.
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
-            app = directory / "ClipFlow.app"
+            app = directory / "Cliply.app"
             (app / "Contents").mkdir(parents=True)
             with (app / "Contents/Info.plist").open("wb") as handle:
-                plistlib.dump({"CFBundleShortVersionString": "1.2.3", "CFBundleExecutable": "ClipFlow",
+                plistlib.dump({"CFBundleShortVersionString": "1.2.3", "CFBundleExecutable": "Cliply", "CFBundleIconName": "AppIcon",
                               "CFBundleIdentifier": "app.clipflow.ClipFlow"}, handle)
+            (app / "Contents/Resources").mkdir()
+            (app / "Contents/Resources/AppIcon.icns").write_bytes(b"test icon resource")
             output = directory / "dist"
 
             def macos_tool(*arguments):
@@ -121,9 +123,23 @@ class ReleaseTests(unittest.TestCase):
                 release.package("v1.2.3", app, output)
             manifest = release.validate_assets("v1.2.3", output)
             self.assertFalse(manifest["signed_and_notarized"])
-            self.assertEqual(manifest["file"], "ClipFlow.dmg")
+            self.assertEqual(manifest["file"], "Cliply.dmg")
             self.assertNotIn("certificate.p12", {path.name for path in output.iterdir()})
             self.assertIn("без нотариализации", (output / "release-notes.md").read_text(encoding="utf-8"))
+
+    def test_packaging_refuses_an_app_without_its_compiled_icon(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            app = directory / "Cliply.app"
+            (app / "Contents").mkdir(parents=True)
+            with (app / "Contents/Info.plist").open("wb") as handle:
+                plistlib.dump({"CFBundleShortVersionString": "1.2.3", "CFBundleExecutable": "Cliply",
+                              "CFBundleIdentifier": "app.clipflow.ClipFlow", "CFBundleIconName": "AppIcon"}, handle)
+            with patch.object(release.sys, "platform", "darwin"), patch.dict(release.os.environ, {}, clear=True), \
+                 patch.object(release, "run") as run:
+                with self.assertRaisesRegex(ValueError, "icon is missing"):
+                    release.package("v1.2.3", app, directory / "dist")
+                run.assert_not_called()
 
 
 if __name__ == "__main__":

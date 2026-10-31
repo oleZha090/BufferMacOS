@@ -37,7 +37,7 @@ jobs:
         env:
           APP_VERSION: ${{ steps.version.outputs.version }}
         run: |
-          xcodebuild -project ClipFlow.xcodeproj -scheme ClipFlow \
+          xcodebuild -project Cliply.xcodeproj -scheme Cliply \
             -configuration Release -destination 'generic/platform=macOS' \
             -derivedDataPath build/ReleaseDerivedData \
             ARCHS='arm64 x86_64' ONLY_ACTIVE_ARCH=NO \
@@ -45,7 +45,7 @@ jobs:
             CODE_SIGNING_ALLOWED=NO build
       - name: Run XCTest
         run: |
-          xcodebuild -project ClipFlow.xcodeproj -scheme ClipFlow \
+          xcodebuild -project Cliply.xcodeproj -scheme Cliply \
             -configuration Debug -destination 'platform=macOS' \
             -derivedDataPath build/TestDerivedData \
             -resultBundlePath build/ReleaseTests.xcresult \
@@ -61,7 +61,7 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           python3 scripts/release_macos.py package --tag "$RELEASE_TAG" \
-            --app build/ReleaseDerivedData/Build/Products/Release/ClipFlow.app \
+            --app build/ReleaseDerivedData/Build/Products/Release/Cliply.app \
             --output dist
       - uses: actions/upload-artifact@v4
         with:
